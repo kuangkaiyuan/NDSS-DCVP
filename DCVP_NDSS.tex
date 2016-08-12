@@ -64,7 +64,7 @@
 % should be used if it is desired that the figures are to be displayed in
 % draft mode.
 %
-\documentclass[conference,letterpaper]{IEEEtran}
+\documentclass[10pt,conference]{IEEEtran}
 \usepackage[pdftex,bookmarksnumbered]{hyperref}
 \usepackage{amssymb}
 %\setcounter{tocdepth}{3}
@@ -86,6 +86,7 @@
 \captionsetup{font=footnotesize}
 \usepackage{pifont, footnote}
 
+\newcommand\FIXME[1]{\textcolor{red}{FIX:}\textcolor{red}{#1}}
 % Add the compsoc option for Computer Society conferences.
 %
 % If IEEEtran.cls has not been installed into the LaTeX system files,
@@ -374,7 +375,7 @@
 % paper title
 % can use linebreaks \\ within to get better formatting as desired
 %\title{RandVMP: Invalidating the Analysis Knowledge about Code Virtualized Obfuscation}
-\title{Invalidating the Analysis Knowledge, Partition Diversity for Code Virtualization Protection}
+\title{Protect Virtual Machine Based Code Obfuscation from Reusing Attacking Knowledge}
 
 % author names and affiliations
 % use a multiple column layout for up to three different
@@ -446,16 +447,32 @@
 
 \begin{abstract}
 %\boldmath
-Code virtualized obfuscation, aka VM (Virtual Machine)-based obfuscation, obfuscates a software program by transforming its native instructions into bytecode instructions for a self-defined virtual instruction set architecture. The execution instruction semantics of the original program are fulfilled by a custom virtual interpreter bundled with the bytecode. Code virtualized obfuscation has been widely used by malware writers and benign software vendors to protect their programs from unauthorized analyses.
+Code virtualization built upon virtual machine (VM)
+technologies are emerging as a viable method for implementing
+code obfuscation to protect programs against unauthorized
+analysis.
+State-of-the-art VM-based protection approaches use a fixed set of virtual
+instructions and bytecode interpreters across programs. This allows an
+experienced attacker to use knowledge extracted from other programs to
+quickly attack applications protected under the same code obfuscation scheme.
+In this paper, we propose a novel VM-code obfuscation system to address the
+issue of reusing attacking knowledge. We achieve this by employing the
+instruction set randomization technique to obfuscate the relationship between
+the opcodes of bytecode instructions and their semantics. Our approach
+partitions the protected code region to multiple segments where each segment
+will be randomized in a different way. As a result, the same opcode of a
+bytecode instruction can be mapped to different semantics in different parts
+of the obfuscated code. We evaluate our approach on \FIXME{xx} real-world
+applications and compare it against state-of-the-art VM-based code
+obfuscation approaches. Experimental results show that our approach provides
+stronger protection at the cost of little extra overhead.
 
-The general idea of reverse analyzing a VM-obfuscated program is through extracting the program's original logic from the interpretation of the bytecode instructions, which is time-consuming and error-prone. Unfortunately, the analysis process could proceed more efficiently if the analyst is aware of the semantics of each bytecode instructions from previously obtained \textit{analysis knowledge}. To obscure the semantics of bytecode instructions, we adopt the idea of ISR (Instruction Set Randomization) to randomize the relationship between the \textit{opcodes} of bytecode instructions and their semantics. Furthermore, we partition the whole bytecode program into several parts, each part with a distinct randomization. As a result, an opcode probably means different semantics in different parts of the bytecode program. We implement a POC prototype named DCVP and conduct some experiments to evaluate the spatial and temporal overhead of DCVP. The experimental results demonstrate that DCVP is both effective and practical for obscuring the semantics of bytecode instructions, and thus for hindering unauthorized analyses.
+
+%Code virtualized obfuscation, aka VM (Virtual Machine)-based obfuscation, obfuscates a software program by transforming its native instructions into bytecode instructions for a self-defined virtual instruction set architecture. The execution instruction semantics of the original program are fulfilled by a custom virtual interpreter bundled with the bytecode. Code virtualized obfuscation has been widely used by malware writers and benign software vendors to protect their programs from unauthorized analyses.
+%
+%The general idea of reverse analyzing a VM-obfuscated program is through extracting the program's original logic from the interpretation of the bytecode instructions, which is time-consuming and error-prone. Unfortunately, the analysis process could proceed more efficiently if the analyst is aware of the semantics of each bytecode instructions from previously obtained \textit{analysis knowledge}. To obscure the semantics of bytecode instructions, we adopt the idea of ISR (Instruction Set Randomization) to randomize the relationship between the \textit{opcodes} of bytecode instructions and their semantics. Furthermore, we partition the whole bytecode program into several parts, each part with a distinct randomization. As a result, an opcode probably means different semantics in different parts of the bytecode program. We implement a POC prototype named DCVP and conduct some experiments to evaluate the spatial and temporal overhead of DCVP. The experimental results demonstrate that DCVP is both effective and practical for obscuring the semantics of bytecode instructions, and thus for hindering unauthorized analyses.
 \end{abstract}
-% IEEEtran.cls defaults to using nonbold math in the Abstract.
-% This preserves the distinction between vectors and scalars. However,
-% if the conference you are submitting to favors bold math in the abstract,
-% then you can use LaTeX's standard command \boldmath at the very start
-% of the abstract to achieve this. Many IEEE journals/conferences frown on
-% math in the abstract anyway.
+
 
 % no keywords
 \begin{IEEEkeywords}
@@ -478,31 +495,65 @@ Virtualized obfuscation, reverse engineering, instruction set randomization, ana
 
 \section{Introduction}
 % no \IEEEPARstart
-Once released, (malicious or benign) software programs are often subject to reverse-engineering~\cite{eilam2011reversing} that aims to understand their inner logics and structures, with which, for example, a malware analyst can reveal the behavior pattern of a malware, or a cracker can tamper some instructions and get a cracked instance of a commercial software. Whatever the result is, it is for sure beyond what the software authors expect.
+%Once released, (malicious or benign) software programs are often subject to reverse-engineering~\cite{eilam2011reversing} that aims to understand their inner logics and structures, with which, for example, a malware analyst can reveal the behavior pattern of a malware, or a cracker can tamper some instructions and get a cracked instance of a commercial software. Whatever the result is, it is for sure beyond what the software authors expect.
+Unauthorized code reverse engineering is a major concern for software developers. This technique is widely used by adversaries to perform various attacks, including removing copyright protection to obtain an illegal copy of the
+software, taking out advertisement from the application, or injecting malicious code into the program. By making the program harder to be traced and analyzed, code obfuscation is a viable means to protect software against unauthorized code
+modification~\cite{barak2001possibility,lynn2004positive,linn2003obfuscation,preda2005control,van2003revisiting,wu2010mimimorphism}.
 
-To protect the intellectual property contained within software programs from being reverse engineered, numerous theories and techniques have been proposed~\cite{barak2001possibility,lynn2004positive,linn2003obfuscation,preda2005control,van2003revisiting,wu2010mimimorphism}. For example, junk instructions \cite{linn2003obfuscation} are inserted to foil disassembly, packers \cite{asprotect,execryptor,upx} are used to compress or encrypt code and data, code obfuscations \cite{wu2010mimimorphism} are implemented to make it harder for an analyst to extract high level semantic information from the code, etc. However, these protection techniques have their own shortcomings. Junk instructions and packers are useful for defeating \textit{static analysis} (analyzing the program without actually running it), but not for defeating \textit{dynamic analysis} (analyzing the program while running it under the environment of a debugger or an emulator, e.g., OllyDbg \cite{od} and IDA Pro \cite{ida}), since junk instructions will not get executed, and compressed or encrypted code will get decompressed or decrypted during execution. Obfuscations, such as instruction substitution and permutation, variable substitution and changing the control flow, are just a compaction of simple instruction transformation methods and are easy to understand \cite{udupa2005deobfuscation}. Stronger protection methods are still in need.
 
-Code virtualized obfuscation, aka VM (Virtual Machine)-based obfuscation, has recently been used to protect software programs from unauthorized analyses \cite{cv,vmp,Themida,fang2011multi,wang2014tdvmp,wang2013nislvmp}. It protects programs by transforming their native binary code into bytecode for a self-defined instruction set architecture. At runtime, the execution instruction semantics of the original programs are fulfilled by a native interpreter bundled with the bytecode. VM-based obfuscation substantially raises the bar on reverse engineering a VM-obfuscated program, and is probably the most sophisticated protection method in the literature.
+%To protect the intellectual property contained within software programs from being reverse engineered, numerous theories and techniques have been proposed~\cite{barak2001possibility,lynn2004positive,linn2003obfuscation,preda2005control,van2003revisiting,wu2010mimimorphism}. For example, junk instructions \cite{linn2003obfuscation} are inserted to foil disassembly, packers \cite{asprotect,execryptor,upx} are used to compress or encrypt code and data, code obfuscations \cite{wu2010mimimorphism} are implemented to make it harder for an analyst to extract high level semantic information from the code, etc. However, these protection techniques have their own shortcomings. Junk instructions and packers are useful for defeating \textit{static analysis} (analyzing the program without actually running it), but not for defeating \textit{dynamic analysis} (analyzing the program while running it under the environment of a debugger or an emulator, e.g., OllyDbg \cite{od} and IDA Pro \cite{ida}), since junk instructions will not get executed, and compressed or encrypted code will get decompressed or decrypted during execution. Obfuscations, such as instruction substitution and permutation, variable substitution and changing the control flow, are just a compaction of simple instruction transformation methods and are easy to understand \cite{udupa2005deobfuscation}. Stronger protection methods are still in need.
 
-A general method for analyzing VM-obfuscated code first reverse analysis the virtual interpreter; and then uses this information to work out the semantics of individual bytecode instructions; and finally, recovers the original program's logic embedded in the bytecode program \cite{falliere2009inside,rolles2009unpacking}. In the above three-phase analysis, the second is the most time-consuming phase, which needs to analyze every bytecode instruction's \texttt{handler} (a procedure for interpreting the bytecode instruction) to get its semantics. The last phase can be efficiently completed with some automated analysis tools \cite{fightingoreans}. To further impede the analysis, some improvements have been proposed. For example, TDVMP \cite{wang2014tdvmp} obfuscates the \texttt{handlers} of bytecode instructions and enables the protected programs the ability of runtime diversity, which is effective for defeating dynamic analysis. Fang et al. \cite{fang2011multi} presented a multi-stage obfuscation method that iteratively transforms a program for many times using different interpretations. Although these approaches pose more obstacles to the analysis process, they fail to change the semantics of bytecode instructions. As a result, an analyst who is aware of the relationship between bytecode instructions and their semantics from previous analysis work does not bother to analyze the obfuscated \texttt{handlers} once again. Specifically, in this paper, we call the results of the semantics of bytecode instructions from previous analysis work the \textit{analysis knowledge}. With such \textit{knowledge}, the process of analyzing a VM-obfuscated program will proceed more efficiently and less toilsomely.
+Code virtualization based on a virtual machine (VM) is
+emerging as a promising way for implementing code obfuscation~\cite{cv,vmp,Themida,fang2011multi,wang2014tdvmp,wang2013nislvmp}. 
+The underlying principal of VM-based protection is to replace the program instructions
+with bespoke virtual instructions (or bytecodes). 
+These virtual bytecodes will then be translated into native machine
+code at runtime to execute on the underlying hardware
+platform.
+This forces the attacker to move from a familiar instruction set to an unfamiliar environment, which can significantly increase the time and effort involved in the attack.
+
+%It protects programs by transforming their native binary code into bytecode for a self-defined instruction set architecture. At runtime, the execution instruction semantics of the original programs are fulfilled by a native interpreter bundled with the bytecode. VM-based obfuscation substantially raises the bar on reverse engineering a VM-obfuscated program, and is probably the most sophisticated protection method in the literature.
+
+%A general approach for attacking VM-obfuscated code is to first reverse engineer the virtual interpreter and then use this information to understand the semantics of individual bytecode instructions. and finally, recovers the original program's logic embedded in the bytecode program \cite{falliere2009inside,rolles2009unpacking}. In the above three-phase analysis, the second is the most time-consuming phase, which needs to analyze every bytecode instruction's \texttt{handler} (a procedure for interpreting the bytecode instruction) to get its semantics. The last phase can be efficiently completed with some automated analysis tools \cite{fightingoreans}. To further impede the analysis, some improvements have been proposed. For example, TDVMP \cite{wang2014tdvmp} obfuscates the \texttt{handlers} of bytecode instructions and enables the protected programs the ability of runtime diversity, which is effective for defeating dynamic analysis. Fang et al. \cite{fang2011multi} presented a multi-stage obfuscation method that iteratively transforms a program for many times using different interpretations. Although these approaches pose more obstacles to the analysis process, they fail to change the semantics of bytecode instructions. As a result, an analyst who is aware of the relationship between bytecode instructions and their semantics from previous analysis work does not bother to analyze the obfuscated \texttt{handlers} once again. Specifically, in this paper, we call the results of the semantics of bytecode instructions from previous analysis work the \textit{analysis knowledge}. With such \textit{knowledge}, the process of analyzing a VM-obfuscated program will proceed more efficiently and less toilsomely.
+
+Reverse engineering of VM-obfuscated code typically follows a number of steps. The attack first reverse-engineers the virtual interpreter to understand the semantics of individual bytecode instructions. The attacker then translates the bytecode back to native machine instructions or even high-level program languages to understand the program logic~\cite{falliere2009inside,rolles2009unpacking}.
+Among these steps, understanding the semantics of individual bytecode instructions is often the most-consuming process, which involved in analysing the handler that used to interpret every bytecode instruction.
+
+Numerous approaches have been proposed to protect VM handlers from reverse engineering.
+Most of them increase the diversity of program behaviour by obfuscating the handler implementation~\cite{wang2014tdvmp} or iteratively transforming a single program multiple times using different interpretation techniques. However, none of the prior work changes the semantics of the bytecode instruction. Such techniques are vulnerable for programs protected under the same obfuscation technique. In particular, an attacker can reuse the knowledge (termed \emph{analysis knowledge} in this paper) of the handler implementation obtained from one program to attack another program.
+
 
 \begin{figure}[!t]
 \centering
 \includegraphics[width=1\columnwidth]{fig/figone.pdf}
-\caption{The process of automated reverse analysis. There are four different target programs, A, B, C and D. In the first scenario, four target programs have the fixed semantic and structural features. It will allow an attacker builds a knowledge base by obtaining \textit{analysis knowledge} from one of them, and then realize the automated reverse analysis of other similar programs. In the second scenario, protection systems make them have different semantic and structural features. In this way, the attacker cannot realize the automated reverse analysis by using the knowledge base.}
+\caption{The process of reusing attacking knowledge for code reverse engineering. Here we have four different target programs, A, B, C and D. In the first scenario, all programs are obfuscated using fixed semantic and structural features. 
+This allows an attacker to reuse knowledge obtained from attacking one program to perform code reverse engineering of other programs. In the second scenario, the protection system ensures that different programs have different semantic and structural features. 
+In this way, the attacker will not be able to reuse the previously extracted knowledge to perform attacks across programs.}
 \label{fig:one}
 \end{figure}
 
-Figure~\ref{fig:one} describes an attack scenario reusing the \textit{analysis knowledge} to achieve automated reverse analysis. There are four different programs to be protected, program A, B, C and D. In the first scenario, the protection system always follows a fixed semantic and structural features when protect four target program. It will allow an attacker to build an attack knowledge base by obtaining \textit{analysis knowledge} about the program A behavior, and then realize the automated reverse analysis of other similar programs. In the second scenario, protection systems provide different protection schemes for different programs, so that they have different semantic and structural features and the \textit{analysis knowledge} obtained from each program is not reusable. In this way, the attacker cannot realize the automated reverse analysis by using the matching of attack knowledge base, so he has to spend a lot of time to analyze every detail for each program.
+Figure~\ref{fig:one} depicts an attacking scenario where an attacker can
+resue the \textit{analysis knowledge} to attack applications protected by
+VM-based code obfuscation. In this example, there are four different programs
+to be protected, which are labelled as A, B, C and D. In the first scenario,
+all the four programs are protected using an identical set of virtual 
+instructions and bytecode handlers. Under such settings, an experienced attacker should be able to 
+quickly reverse-engineer three programs by using the knowledge obtained from attacking one 
+of the programs. 
+ In the second scenario, the protection system uses
+different protection schemes for different programs, so that they have
+different semantics and structural features across programs, so that the
+knowledge obtained from one program will be in applicable to others. 
+This forces the attacker to start from the scratch when attacking each 
+individual program. 
 
-To mitigate the effect of reuse of \textit{analysis knowledge}, we propose DCVP (Code Virtualization Protection with Diversity), a hardened code virtualized obfuscation system that obscures the semantics of bytecode instructions. The method we use is ISR (Instruction Set Randomization) \cite{kc2003countering}, which randomly changes the \textit{opcodes} of bytecode instructions and their semantics (as described in section~\ref{sec:random}). The randomization itself, however, is not sufficient to make a difference, since it is similar to monoalphabetic substitution encryption and is easy to be bypassed according to the non-uniform frequencies of bytecode instructions. Therefore, DCVP further partitions the bytecode program into several parts and the semantics of bytecode instructions in each part are randomized differently (as described in section~\ref{sec:partition-random}). As a result, the same bytecode instruction in different parts of the bytecode program probably has different semantics.
 
-The contributions presented in this paper are summarized as follows:
-\begin{enumerate}
-  \item We present a detailed introduction to the internals of code virtualized obfuscation and point out that the existence of \textit{analysis knowledge} can help to reduce analyst's workload and speed up the analysis process.
-  \item We propose a countermeasure to mitigate the effect of reuse of \textit{analysis knowledge}, which partitions the bytecode programs into serveral parts and randomizes the semantics of bytecode instructions in each part differently.
-  \item We have implemented a POC prototype of our approach, namely DCVP, and conducted some evaluations in terms of its effectiveness as well as spatial and temporal overhead. The results show that DCVP is a promising and practical approach for mitigating the effect of reuse of \textit{analysis knowledge}.
-\end{enumerate}
+To mitigate the effect of reuse of \textit{analysis knowledge}, we propose DCVP (Code Virtualization Protection with Diversity), a enhanced VM-based code obfuscation system that obscures the semantics of bytecode instructions. 
+We employ a technique called Instruction Set Randomization (ISR)~\cite{kc2003countering} to randomly change the \textit{opcodes} of bytecode instructions and their semantics. The randomization itself, however, is not sufficient for providing stronger protection, because it is similar to monoalphabetic substitution encryption~\cite{} and is easy to be bypassed according to the non-uniform frequencies of bytecode instructions. \FIXME{This is a very long sentence and I have no ideas of what you are talking about here.}
+To overcome this issue, DCVP further partitions the bytecode program into several parts where the semantics of bytecode instructions in each part are randomized in different ways. As a result, the same bytecode instruction in different parts of the bytecode program is likely to  have different semantics.
+
+The key contribution of this paper is a countermeasure to address the issue of reusing \textit{analysis knowledge} to perform code reverse engineering across programs. This is achieved by first partitioning the bytecode programs into several parts and randomizeing the semantics of bytecode instructions in each part in different ways.
+We compare our approach against \FIXME{xx} on \FIXME{XXX} applications. Experimental results show that DCVP is able to provide stronger protection at the cost of little extra overhead. 
 
 The rest of the paper is organized as follows. In Section II, we illustrate the internals of VM-based obfuscation. Section III gives our threat model, which describes the analyst's capabilities and goals, and we illustrate the process of reverse engineering a VM-obfuscated program. In Section IV, V, VI and VII, we present the details of DCVP. Section VIII evaluates DCVP for its effectiveness and its spatial and temporal overhead. Section IX presents the related work, and Section X presents the conclusion and discusses the future work.
 

@@ -1,0 +1,8 @@
+*.aux
+DCVP_NDSS.bbl
+*.blg
+DCVP_NDSS.log
+*.out
+DCVP_NDSS.pdf
+*.synctex
+DCVP_NDSS.pdf
